@@ -104,4 +104,4 @@ ENV/
 .idea
 
 # 人狼ログ
-.log
+log
