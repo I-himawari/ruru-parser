@@ -100,4 +100,8 @@ ENV/
 # mypy
 .mypy_cache/
 
+# PyCharmのファイル
 .idea
+
+# 人狼ログ
+.log
