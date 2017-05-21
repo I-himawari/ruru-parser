@@ -4,6 +4,19 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from datetime import datetime as dt
+
+
+def ruru_old_log_checker(s):
+    """
+    古いログ形式ならTrue、そうでないならFalseを返す
+    :param s:
+    :return:
+    """
+    time_data_regex = r'[0-9]{4}\/[0-9]{2}\/[0-9]{2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}'
+    # るる鯖新ログ形式なら1つ目のdiv:d12150で時刻が取得可能。そうでないなら取得不可
+    time_data = re.search(time_data_regex, str(s.find('div', class_='d12150')))
+    return False if time_data else True
 
 
 def ruru_parser(local_address=None, url=None):
@@ -21,10 +34,10 @@ def ruru_parser(local_address=None, url=None):
         villagers_name_regex = r'「.*」'
         villagers_number_regex = r'(参加:|定員：)..?名'
         role_pattern_regex = r'(\[配役.\]|役職\[.\])'  # 配役パターン
+        time_data_regex = r'[0-9]{4}\/[0-9]{2}\/[0-9]{2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}'
         meta_data = dict()
 
         # 村名の取得
-        print(header)
         meta_data['villagers_name'] = re.search(villagers_name_regex, header).group().lstrip('「').rstrip('」')
 
         # 参加人数の取得
@@ -34,6 +47,14 @@ def ruru_parser(local_address=None, url=None):
         # 配役パターンの取得
         role_pattern = re.search(role_pattern_regex, header).group()
         meta_data['role_pattern'] = re.search(r'(A|B|C|D)', role_pattern).group()
+
+        # timestampの取得
+        time_data = re.search(time_data_regex, str(s.find('div', class_='d12150')))  # るる鯖新ログ形式なら取得可
+        if not time_data:
+            time_data = re.search(time_data_regex, str(s.find_all('div', class_='d12150')[1]))
+
+        meta_data['timestamp'] = int(dt.strptime(time_data.group(), '%Y/%m/%d %H:%M:%S').timestamp())
+        meta_data['server_name'] = 'ruru'
 
         return meta_data
 
@@ -88,13 +109,23 @@ def ruru_parser(local_address=None, url=None):
         return all_player_list
 
     def main_text_parser(s):
+        """
+        主文をコンバートする
+        :param s:
+        :return:
+        """
         day_list = s.find_all('div', class_='d12151')
 
         # ログの長さから、ログ展開を推測し、分析する
         # 終了後と初日昼（開始前）の存在は確定とする
-        for v in reversed(day_list):
-            pass
-        pass
+        first_div = True
+        old_log_type = ruru_old_log_checker(s)  # 旧ログ形式かチェクする
+        now_day = None  # 現在の日数を取得する
+        for v in day_list:
+            if first_div:
+                first_div = False
+                if old_log_type:
+                    continue
 
     # ローカルが指定されている場合は、ローカルのhtmlを取得する
     if local_address:
@@ -104,7 +135,7 @@ def ruru_parser(local_address=None, url=None):
     # URLが指定されている場合はURL先のHTMLを取得する
     else:
         get_request = requests.get(url)
-        soup = BeautifulSoup(get_request.text, 'lxml')
+        soup = BeautifulSoup(get_request.content, 'lxml')
 
     # metaの処理をする
     ruru_dict = dict()
