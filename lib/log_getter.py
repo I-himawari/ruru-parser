@@ -47,7 +47,7 @@ def download_ruru_log(ruru_number, save_path='../log'):
         return True
 
 if __name__ == '__main__':
-    for v in range(186834, 420000):
+    for v in range(100000, 420000):
         if download_ruru_log(v):
             time.sleep(1)
 
