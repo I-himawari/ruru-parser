@@ -111,21 +111,31 @@ def ruru_parser(local_address=None, url=None):
     def main_text_parser(s):
         """
         主文をコンバートする
-        :param s:
+        :param s:BeautifleSoup
         :return:
         """
         day_list = s.find_all('div', class_='d12151')
 
+        print(day_list)
         # ログの長さから、ログ展開を推測し、分析する
         # 終了後と初日昼（開始前）の存在は確定とする
-        first_div = True
+        first_div = True  # 最初のdiv判定
+        end_day = False  # 終了後判定
         old_log_type = ruru_old_log_checker(s)  # 旧ログ形式かチェクする
         now_day = None  # 現在の日数を取得する
         for v in day_list:
+            # 旧ログの場合、最初のd12151はスキップする。
             if first_div:
                 first_div = False
+                end_day = True
                 if old_log_type:
                     continue
+
+            # 終了後のログの解析をする
+            if end_day:
+                pass
+
+
 
     # ローカルが指定されている場合は、ローカルのhtmlを取得する
     if local_address:
