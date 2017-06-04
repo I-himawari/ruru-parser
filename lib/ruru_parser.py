@@ -5,6 +5,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime as dt
+import os
+import json
 
 
 def ruru_old_log_checker(s):
@@ -32,7 +34,7 @@ def ruru_parser(local_address=None, url=None):
         header = str(s.find('div', class_='d11'))
 
         villagers_name_regex = r'「.*」'
-        villagers_number_regex = r'(参加:|定員：)..?名'
+        villagers_number_regex = r'(参加:|定員：|定員:)..?名'
         role_pattern_regex = r'(\[配役.\]|役職\[.\])'  # 配役パターン
         time_data_regex = r'[0-9]{4}\/[0-9]{2}\/[0-9]{2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}'
         meta_data = dict()
@@ -46,7 +48,7 @@ def ruru_parser(local_address=None, url=None):
 
         # 配役パターンの取得
         role_pattern = re.search(role_pattern_regex, header).group()
-        meta_data['role_pattern'] = re.search(r'(A|B|C|D)', role_pattern).group()
+        meta_data['role_pattern'] = re.search(r'(A|B|C|D|Z)', role_pattern).group()
 
         # timestampの取得
         time_data = re.search(time_data_regex, str(s.find('div', class_='d12150')))  # るる鯖新ログ形式なら取得可
@@ -88,10 +90,11 @@ def ruru_parser(local_address=None, url=None):
 
             elif log_type[now_log] == 'role':
                 role_data = v.find_all('span')
-                # spanタグの時間タグを取得してしまう事がある為、もし取得していた場合はずらす
+                #
                 if role_data != [] and len(role_data) == 1:
                     role_list.append(str(role_data[0].text).replace('\u3000', ''))
-                elif len(role_data) == 2:
+                # spanタグの時間タグを取得してしまう事がある為、もし取得していた場合はずらす
+                elif len(role_data) >= 2:
                     role_list.append(str(role_data[1].text).replace('\u3000', ''))
             now_log += 1
             if log_type[now_log] == 'reset':
@@ -108,7 +111,7 @@ def ruru_parser(local_address=None, url=None):
 
         return all_player_list
 
-    def main_text_parser(s):
+    def main_text_parser(s, player_list={}):
         """
         主文をコンバートする
         :param s:BeautifleSoup
@@ -116,25 +119,77 @@ def ruru_parser(local_address=None, url=None):
         """
         day_list = s.find_all('div', class_='d12151')
 
-        print(day_list)
         # ログの長さから、ログ展開を推測し、分析する
         # 終了後と初日昼（開始前）の存在は確定とする
         first_div = True  # 最初のdiv判定
-        end_day = False  # 終了後判定
+        end_day = True  # 終了後判定
         old_log_type = ruru_old_log_checker(s)  # 旧ログ形式かチェクする
         now_day = None  # 現在の日数を取得する
+        night_checkr = r'd12151 log_night'  # 夜チェッカー
+        i = 0
+        all_log_data = dict()  # 全ての発言ログを取得する変数
         for v in day_list:
+            i += 1
+            # print(v)
             # 旧ログの場合、最初のd12151はスキップする。
             if first_div:
                 first_div = False
-                end_day = True
                 if old_log_type:
                     continue
 
+            # ログを取得する
+            talks = v.find_all('tr')
+
             # 終了後のログの解析をする
             if end_day:
+                end_day = False
+
+            # 開始前ログの解析をする
+            elif i == len(day_list):
                 pass
 
+            # ゲーム中のログ解析をする
+            else:
+                # ゲーム内日付を取得する
+                now_date = (len(day_list) - 2 - i) // 2 + 2
+                # 夜中
+                if '<div class="d12151 log_night">' in str(v):
+                    # for talk in talks:
+                    #     pass
+                    pass
+
+                # 日中
+                else:
+                    move_datas = list()
+                    for talk in talks:
+                        name, text = talk.find('span', class_='name'), talk.find('td', class_='cc')
+                        # '投票時間になりました。時間内に処刑の対象を決定してください'
+
+                        # 発言ログで、空ログではない場合の処理
+                        if text and name:
+                            # 独り言か否かのチェック
+                            if '<span class="end">の独り言</span>' in str(talk):
+                                log_type = 'soliloquence'
+                            else:
+                                log_type = 'talk'
+
+                            name = str(name.get_text())  # re.sub(r'<?span.*>', '', str(name))
+                            text = re.sub(r'<br/>', ' ', str(text))
+                            text = re.sub('<[^<]+?>', '', text)
+                            move_data = {
+                                'name': name,
+                                'text': text,
+                                'type': log_type,
+                            }
+                            move_datas.append(move_data)
+
+                        # 投票の場合の処理　未実装
+
+                    move_datas.reverse()  # 取得ログを逆転させる
+                    day_x_noon = 'day_%d_noon' % now_date
+                    all_log_data[day_x_noon] = move_datas
+
+        return all_log_data
 
 
     # ローカルが指定されている場合は、ローカルのhtmlを取得する
@@ -151,11 +206,27 @@ def ruru_parser(local_address=None, url=None):
     ruru_dict = dict()
     ruru_dict['meta'] = meta_parser(soup)
     ruru_dict['player'] = player_parser(soup)
-    main_text_parser(soup)
+    ruru_dict['log'] = main_text_parser(soup)
 
     return ruru_dict
 
 
 if __name__ == '__main__':
-    ruru_parser(local_address='../log/105000.html')
-    ruru_parser(url='https://ruru-jinro.net/log5/log419460.html')
+    files = os.listdir('../log/')
+    for file in files:
+        # ファイルをパースし、失敗したら見なかった事にする
+        try:
+            write_file_name = '../json/%s' % file.split('.')[0] + '.json'
+            if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0:
+                print('EXIST %s' % file)
+            else:
+                print('OPEN %s' % file)
+                f = open(write_file_name, 'w')
+                json_data = json.dumps(
+                        ruru_parser(local_address='../log/%s' % file),
+                        sort_keys=True, ensure_ascii=False, indent=2
+                    )
+                f.write(json_data)
+                f.close()
+        except:
+            print('ERROR %s' % file)
