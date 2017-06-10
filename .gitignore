@@ -105,3 +105,4 @@ ENV/
 # 人狼ログ
 log
 json
+cache
