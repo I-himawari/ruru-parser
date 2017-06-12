@@ -8,6 +8,7 @@ import time
 import copy
 import re
 from pprint import pprint
+from datetime import datetime
 
 """
 やる予定の統計
@@ -24,7 +25,9 @@ a = automata_db['PretaAutomata']
 add_a = automata_db['AddPretaAutomata']  # 元データを加工したものをぶっ込むフィールド
 
 # 取得したい日時のログを収録する。
-d = add_a.find()
+dt = datetime(2016, 1, 1, 12, 30, 59, 0).timestamp()
+d = add_a.find({'meta.timestamp': {'$gte': dt}})
+
 
 if __name__ == '__main__':
     talk_list = list()  # 発言データが色々投げ込まれるゴミ箱
@@ -33,17 +36,13 @@ if __name__ == '__main__':
     count = 0
     # role_pattern = dict()
     for v in d:
-        # プレイヤー数が規定に満たない場合、統計の対象としない。
-        if len(v['player']) != 17:
-            continue
-
         count += 1
         # 暫定村人の発言のみ取得する
         # 暫定村人リストを作成する
         vill_list = [player['name'] for player in v['player'] if player['virtual_role'] == '村人']
 
         # 暫定村人のログのみ取得した後、それぞれの役職のデータを入れる。
-        # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおす
+        # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおしてもいいかも。
         for t_log in v['target_log']:
             if t_log['name'] not in vill_list:
                 continue

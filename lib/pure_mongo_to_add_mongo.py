@@ -130,19 +130,34 @@ def main_log_set():
     メインの統計処理をあれこれする所
     """
 
+    # 身内村判定
+    def get_local_villager(vill_name):
+        for ng_word in ['ダンガンロンパ', 'ダンロン', 'RP', 'なんJ', '身内']:
+            if ng_word in vill_name:
+                return True
+        return False
+
     # 設定変数
-    target_vill_number = 17
-    target_day = 2  # 取得したい日時。指定しない場合はNone
-    target_log_type = 'talk'
-    target_virtual_role = True
+    target_vill_number = 17  # 取得する数
+    target_day = 7  # 取得したい日時。指定しない場合はNone
+    target_role_pattern = 'A'  # 配役
+    target_log_type = 'talk'  # 取得ログタイプ
+    target_virtual_role = True  # 仮想役職モードのスイッチ
     # 設定変数終わり
 
-    d = a.find({'meta.villagers_number': str(target_vill_number)})
+    d = a.find({
+        'meta.villagers_number': str(target_vill_number),
+        'meta.role_pattern': target_role_pattern,
+    })
 
     print('ログをMongoDBに出力中')
     for v in d:
         # プレイヤー数が規定以外の場合は返す
         if len(v['player']) != target_vill_number:
+            continue
+
+        # 身内村は除外する
+        if get_local_villager(v['meta']['villagers_name']):
             continue
 
         # 取得したいログだけ、target_logに挿入する。
