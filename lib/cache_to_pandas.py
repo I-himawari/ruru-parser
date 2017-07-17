@@ -1,3 +1,5 @@
+# キャッシュのデータをpandasであれこれする
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import pymongo
@@ -10,31 +12,61 @@ import re
 from pprint import pprint
 import matplotlib.pyplot as plt
 import matplotlib
-# from pyknp import Jumanpp
 import sys
 import codecs
 from janome.tokenizer import Tokenizer
-# sys.stdin = codecs.getreader(’utf_8’)(sys.stdin)
-# sys.stdout = codecs.getwriter(’utf_8’)(sys.stdout)
-# jumanpp = Jumanpp()  # JUMAN++をsubprocessモードで使用
+
+# MongoDBの立ち上げ
+os.system('sudo service mongod start')
+
+# MongoDBの接続及び仮想環境の作成
+client = pymongo.MongoClient()
+automata_db = client['PretaAutomata']
+a = automata_db['PretaAutomata']
+add_a = automata_db['AddPretaAutomata']  # 元データを加工したものをぶっ込むフィールド
+
+# 取得したい日時のログを収録する。
+dt = datetime(2016, 10, 1, 12, 30, 59, 0).timestamp()
+d = add_a.find({'meta.timestamp': {'$gte': dt}})
+
+talk_list = list()  # 発言データが色々投げ込まれるゴミ箱
+
+# 以降のソースコードは場合によって変更する可能性が高い。
+print('データ取得開始')
+count = 0
+for v in d:
+    count += 1
+    # プレイヤーのCO情報（仮想役職）と勝率のデータが欲しい
+
+
+    # 人狼の内訳と
+    """
+    vill_list = [player['name'] for player in v['player'] if player['role'] == '人狼']
+
+    # 指定暫定役職のログのみ取得した後、Pandasが処理しやすいように、発言ごとにそれぞれの役職のデータを入れる。
+    # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおしてもいいかも。
+    for t_log in v['target_log']:
+        if t_log['name'] not in vill_list:
+            continue
+        t_log['role'] = [player['role'] for player in v['player'] if player['name'] == t_log['name']][0]
+        talk_list.append(t_log)
+    """
+
+print('データ取得完了。合計%d村のデータを取得' % count)
+
 t = Tokenizer()
 # 出力を日本語に指定する。
 font = {'family' : 'TakaoGothic'}
 matplotlib.rc('font', **font)
 
-"""
-やる予定の統計
-・暫定村人の、役職ごとの発言タイミングの値（有意義なデータが取れなかった）
-・暫定村人の、役職ごとの発言回数の平均値
-・（家に帰ってから）2日の仮定村人発言の、役職ごとの発言傾向の違い（役職ずつ別々のプロットを取る予定）
+df = pd.read_json(talk_list)
 
-ここらへんはJupyterでやった方が良いような気がしてきた。
-"""
-
-all_log = open('../cache/cache').read()  # キャッシュした全データ
-df = pd.read_json(all_log)
 # df = df[df.role == '人狼']
-del df['type']
+# del df['type']  # 発言タイプのデータを削除する
+
+# 初期設定おわり
+# 後は適当にやって、どうぞ。
+# 以降サンプル
 
 def get_role_dict(df_def, role, hinshi):
     df_def = df_def[df_def.role == role]
@@ -62,12 +94,11 @@ wolf_talk_dict = get_role_dict(df, '人狼', '名詞')
 # 村の発言を形態素解析にかける
 vill_talk_dict = get_role_dict(df, '村人', '名詞')
 
-"""
 vs = pd.Series(vill_talk_dict).sort_values(ascending=False).head(100)
 ws = pd.Series(wolf_talk_dict).sort_values(ascending=False).head(100)
 
-vs.to_frame()
-ws.to_frame()
+vs = vs.to_frame()
+ws = ws.to_frame()
 
 vs.columns=['vill_count']
 ws.columns=['wolf_count']
@@ -77,8 +108,7 @@ for i in range(vs.count()[0]):
     vs['vill_count'][i] = int(vs['vill_count'][i] * talk_count)
 
 vs.join(ws, how='outer').plot.bar()
-
-"""
+plt.show()
 """
 for talk_lists in wolf_df.text:
     try:

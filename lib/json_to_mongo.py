@@ -1,3 +1,5 @@
+# JSONのデータをMongoDBに格納する
+
 import pymongo
 import json
 import os

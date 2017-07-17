@@ -1,3 +1,5 @@
+# MongoDBの割り出し結果をキャッシュに保存する
+
 import pandas as pd
 import numpy as np
 import pymongo
@@ -25,23 +27,21 @@ a = automata_db['PretaAutomata']
 add_a = automata_db['AddPretaAutomata']  # 元データを加工したものをぶっ込むフィールド
 
 # 取得したい日時のログを収録する。
-dt = datetime(2016, 1, 1, 12, 30, 59, 0).timestamp()
+dt = datetime(2016, 10, 1, 12, 30, 59, 0).timestamp()
 d = add_a.find({'meta.timestamp': {'$gte': dt}})
 
 
 if __name__ == '__main__':
     talk_list = list()  # 発言データが色々投げ込まれるゴミ箱
 
+    # 以降のソースコードは場合によって変更する可能性が高い。
     print('データ取得開始')
     count = 0
-    # role_pattern = dict()
     for v in d:
         count += 1
-        # 暫定村人の発言のみ取得する
-        # 暫定村人リストを作成する
-        vill_list = [player['name'] for player in v['player'] if player['virtual_role'] == '村人']
+        vill_list = [player['name'] for player in v['player'] if player['role'] == '人狼']
 
-        # 暫定村人のログのみ取得した後、それぞれの役職のデータを入れる。
+        # 指定暫定役職のログのみ取得した後、Pandasが処理しやすいように、発言ごとにそれぞれの役職のデータを入れる。
         # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおしてもいいかも。
         for t_log in v['target_log']:
             if t_log['name'] not in vill_list:
@@ -61,5 +61,3 @@ if __name__ == '__main__':
     )
     f.write(json_data)
     f.close()
-
-    # cache_metaとかに色々なデータを書いておきたい。取得したデータの数とか。

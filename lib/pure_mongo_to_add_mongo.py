@@ -87,29 +87,40 @@ def get_virtual_role(v, target_day=None, noon=True):
         仮想役職チェック（全部の判定を下す）
 
         target_dayが指定されていない場合は、全ログから取得する。
+        なお、村人はチェックから除外する。
 
         仮想占い判定が下るのは、以下の条件を満たした時。
-        1　非村人
-        2　1発言目と2発言目で占い正規表現チェッカーに引っかがった時。
-        3（未実装）　占いCOがコピペではない時
+        * 1発言目と2発言目で占い正規表現チェッカーに引っかがった時。
+        * （未実装）　占いCOがコピペではない時
 
-        仮想霊能判定は未実装
+        仮想霊能判定が下るのは、以下の条件を満たした時。
+        * 1発言目と2発言目で霊能正規表現チェッカーに引っかがった時。
 
         仮想狩人判定は未実装
         """
+
+        # 村騙りの可能性を除外する
         if p['role'] == '村人':
             return '村人'
 
-        # 最初の2発言のみ抽出する残りの発言まで含めると、ノイズが加わる可能性が高まる為
+        # 最初の2発言のみ抽出する。残りの発言まで含めると、ノイズが加わる可能性が高まる為
         t.sort(key=lambda x: x['player_talk_id'])
         if len(t) >= 2:
             t = t[0:2]
+        
+        # 占いと霊能の発言チェック用正規表現。貧弱なので今後改良したい
         seer_regex_checker_base = r'^\s?(占い|うらない)(CO|ＣＯ)( |　)?.+(○|●|村人|人狼)'
         seer_regex_checker = re.compile(seer_regex_checker_base)
 
+        medium_regex_checker_base = r'^\s?(霊能|れいのう)(CO|ＣＯ)?'
+        medium_regex_checker = re.compile(medium_regex_checker_base)
+
+        # 正規表現でチェックをかける
         for talk in t:
             if seer_regex_checker.match(talk['text']):
                 return '占い師'
+            elif medium_regex_checker.match(talk['text']):
+                return '霊能者'
 
         return '村人'
 
@@ -132,14 +143,14 @@ def main_log_set():
 
     # 身内村判定
     def get_local_villager(vill_name):
-        for ng_word in ['ダンガンロンパ', 'ダンロン', 'RP', 'なんJ', '身内']:
+        for ng_word in ['ダンガンロンパ', 'ダンロン', 'RP', 'なんJ', '身内']:  # 除外する村名リスト
             if ng_word in vill_name:
                 return True
         return False
 
     # 設定変数
     target_vill_number = 17  # 取得する数
-    target_day = 7  # 取得したい日時。指定しない場合はNone
+    target_day = 2  # 取得したい日時。指定しない場合はNone
     target_role_pattern = 'A'  # 配役
     target_log_type = 'talk'  # 取得ログタイプ
     target_virtual_role = True  # 仮想役職モードのスイッチ
@@ -152,7 +163,7 @@ def main_log_set():
 
     print('ログをMongoDBに出力中')
     for v in d:
-        # プレイヤー数が規定以外の場合は返す
+        # プレイヤー数が規定以外（間違っているログ）の場合は取得しない
         if len(v['player']) != target_vill_number:
             continue
 
@@ -177,14 +188,13 @@ def main_log_set():
         # プレイヤーごとに発言IDを割り振る。（このメソッドはvのdataをそのまま書き換える）。
         add_player_talk_id(day_log=v['target_log'], player_list=v['player'])
 
-        # もし全ログ取得をする場合、ここでPandasが扱いやすい形に変換する。
-        # 今回は全ログ取得はまだしないのでスキップする。
+        # もし全ログ取得をする場合、ここで日時データを挿入する。
 
-        # その日の振る舞いから、仮想役職を取得する。
+        # その日の振る舞いから、仮想（振舞っている役職）役職を取得する。
         if target_virtual_role:
             v['player'] = get_virtual_role(v, target_day=target_day, noon=True)
 
-        # 余計なデータを消す
+        # 余計なログを消す
         del v['log']
 
         # ログをMongoに挿入する

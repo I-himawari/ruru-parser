@@ -58,6 +58,9 @@ def ruru_parser(local_address=None, url=None):
         meta_data['timestamp'] = int(dt.strptime(time_data.group(), '%Y/%m/%d %H:%M:%S').timestamp())
         meta_data['server_name'] = 'ruru'
 
+        # 勝利役職の取得
+        # 未実装
+
         return meta_data
 
     def player_parser(s):
@@ -143,9 +146,11 @@ def ruru_parser(local_address=None, url=None):
             # 終了後のログの解析をする
             if end_day:
                 end_day = False
+                # 未実装
 
             # 開始前ログの解析をする
             elif i == len(day_list):
+                # 未実装
                 pass
 
             # ゲーム中のログ解析をする
@@ -154,6 +159,7 @@ def ruru_parser(local_address=None, url=None):
                 now_date = (len(day_list) - 2 - i) // 2 + 2
                 # 夜中
                 if '<div class="d12151 log_night">' in str(v):
+                    # 夜中のログ取得は未実装
                     # for talk in talks:
                     #     pass
                     pass
@@ -202,7 +208,6 @@ def ruru_parser(local_address=None, url=None):
         get_request = requests.get(url)
         soup = BeautifulSoup(get_request.content, 'lxml')
 
-    # metaの処理をする
     ruru_dict = dict()
     ruru_dict['meta'] = meta_parser(soup)
     ruru_dict['player'] = player_parser(soup)
