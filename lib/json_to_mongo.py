@@ -5,6 +5,7 @@ import json
 import os
 import sys
 
+os.system('sudo service mongod start')
 client = pymongo.MongoClient()
 automata_db = client['PretaAutomata']
 automata_col = automata_db['PretaAutomata']

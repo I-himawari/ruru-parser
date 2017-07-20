@@ -27,7 +27,7 @@ a = automata_db['PretaAutomata']
 add_a = automata_db['AddPretaAutomata']  # 元データを加工したものをぶっ込むフィールド
 
 # 取得したい日時のログを収録する。
-dt = datetime(2016, 10, 1, 12, 30, 59, 0).timestamp()
+dt = datetime(2015, 4, 1, 12, 30, 59, 0).timestamp()
 d = add_a.find({'meta.timestamp': {'$gte': dt}})
 
 
@@ -35,14 +35,16 @@ if __name__ == '__main__':
     talk_list = list()  # 発言データが色々投げ込まれるゴミ箱
 
     # 以降のソースコードは場合によって変更する可能性が高い。
+    """
+    今回行っている内容
+    """
     print('データ取得開始')
     count = 0
     for v in d:
         count += 1
         vill_list = [player['name'] for player in v['player'] if player['role'] == '人狼']
 
-        # 指定暫定役職のログのみ取得した後、Pandasが処理しやすいように、発言ごとにそれぞれの役職のデータを入れる。
-        # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおしてもいいかも。
+        # 指定役職のログのみ取得した後、Pandasが処理しやすいように、発言ごとにそれぞれの役職のデータを入れる。
         for t_log in v['target_log']:
             if t_log['name'] not in vill_list:
                 continue

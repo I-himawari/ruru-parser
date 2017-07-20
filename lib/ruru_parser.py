@@ -58,6 +58,24 @@ def ruru_parser(local_address=None, url=None):
         meta_data['timestamp'] = int(dt.strptime(time_data.group(), '%Y/%m/%d %H:%M:%S').timestamp())
         meta_data['server_name'] = 'ruru'
 
+        meta_data['version'] = '0.11'
+        
+        victory_data = str(s.find('span', class_='result'))
+        victory_data = re.sub('<[^<]+?>', '', victory_data)
+        victory_pattern = (
+            ('「村　人」陣営の勝利です！！', 'vill'),
+            ('「人　狼」陣営の勝利です！！', 'wolf'),
+            ('「妖　狐」陣営の勝利です！！', 'fox'),
+            ('引き分けです', 'draw'),  # 
+        )
+        victory_result = 'del'  # 廃村時
+        for v in victory_pattern:
+            if v[0] in victory_data:
+                victory_result = v[1]
+
+        meta_data['victory'] = victory_result
+        
+
         # 勝利役職の取得
         # 未実装
 

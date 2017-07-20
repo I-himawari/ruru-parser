@@ -16,57 +16,41 @@ import sys
 import codecs
 from janome.tokenizer import Tokenizer
 
+# 形態素解析のセッティング
+t = Tokenizer()
+
+# グラフの出力を日本語に指定する。
+font = {'family' : 'TakaoGothic'}
+matplotlib.rc('font', **font)
+
 # MongoDBの立ち上げ
 os.system('sudo service mongod start')
 
-# MongoDBの接続及び仮想環境の作成
+# MongoDBの仮想環境への接続
 client = pymongo.MongoClient()
 automata_db = client['PretaAutomata']
-a = automata_db['PretaAutomata']
-add_a = automata_db['AddPretaAutomata']  # 元データを加工したものをぶっ込むフィールド
+add_a = automata_db['AddPretaAutomata']
 
 # 取得したい日時のログを収録する。
-dt = datetime(2016, 10, 1, 12, 30, 59, 0).timestamp()
+dt = datetime(2015, 4, 1, 12, 30, 59, 0).timestamp()
 d = add_a.find({'meta.timestamp': {'$gte': dt}})
 
 talk_list = list()  # 発言データが色々投げ込まれるゴミ箱
 
-# 以降のソースコードは場合によって変更する可能性が高い。
-print('データ取得開始')
-count = 0
-for v in d:
-    count += 1
-    # プレイヤーのCO情報（仮想役職）と勝率のデータが欲しい
-
-
-    # 人狼の内訳と
-    """
-    vill_list = [player['name'] for player in v['player'] if player['role'] == '人狼']
-
-    # 指定暫定役職のログのみ取得した後、Pandasが処理しやすいように、発言ごとにそれぞれの役職のデータを入れる。
-    # roleを入れるのはpure_mongo_to_add_mongo.pyの方で実装しなおしてもいいかも。
-    for t_log in v['target_log']:
-        if t_log['name'] not in vill_list:
-            continue
-        t_log['role'] = [player['role'] for player in v['player'] if player['name'] == t_log['name']][0]
-        talk_list.append(t_log)
-    """
-
-print('データ取得完了。合計%d村のデータを取得' % count)
-
-t = Tokenizer()
-# 出力を日本語に指定する。
-font = {'family' : 'TakaoGothic'}
-matplotlib.rc('font', **font)
-
-df = pd.read_json(talk_list)
-
-# df = df[df.role == '人狼']
-# del df['type']  # 発言タイプのデータを削除する
-
 # 初期設定おわり
 # 後は適当にやって、どうぞ。
 # 以降サンプル
+for v in d:
+    wolf_list = [player for player in v['player'] if player['role'] == '人狼']
+    # COパターンの作成
+    seer = len([pl for pl in wolf_list if pl['virtual_role'] == '占い師'])
+    mid = len([pl for pl in wolf_list if pl['virtual_role'] == '霊能者'])
+    co_pattern = '%s-%s' % (seer, mid)
+    append_data = (co_pattern, v['meta']['victory'])
+    # 勝利役職の挿入
+    talk_list.append(append_data)  # もはやtalk_listではない
+
+df = pd.read_json(talk_list)
 
 def get_role_dict(df_def, role, hinshi):
     df_def = df_def[df_def.role == role]

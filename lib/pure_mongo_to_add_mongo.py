@@ -9,6 +9,23 @@ from pprint import pprint
 
 """
 格納されたMongoのデータを、使いたい形に変形させる
+
+target_log ターゲットの日時のログ dict
+{
+    （追加）player_talk_id: プレイヤーの発言回数ID
+    （追加）day_id: 発言通し番号
+    text: 発言内容
+    name: 発言者名
+}
+
+player プレイヤーリスト dict
+{
+    name: プレイヤーの表示名
+    role: 役職名
+    trip: プレイヤーのトリップ名
+    （追加）virtual_role: 仮想役職情報
+}
+
 """
 """
 TODOLIST
@@ -49,7 +66,7 @@ def day_cutter(log, target_day, noon=True):
 
 def add_player_talk_id(day_log, player_list):
     """
-    プレイヤーごとに発言IDを割り振る。
+    プレイヤーごとに発言回数IDを割り振る。
     :param day_log: 1日単位のログ
     :param player_list: プレイヤーリスト
     :return: 直接書き換える
@@ -106,7 +123,7 @@ def get_virtual_role(v, target_day=None, noon=True):
         # 最初の2発言のみ抽出する。残りの発言まで含めると、ノイズが加わる可能性が高まる為
         t.sort(key=lambda x: x['player_talk_id'])
         if len(t) >= 2:
-            t = t[0:2]
+            t = t[0:1]
         
         # 占いと霊能の発言チェック用正規表現。貧弱なので今後改良したい
         seer_regex_checker_base = r'^\s?(占い|うらない)(CO|ＣＯ)( |　)?.+(○|●|村人|人狼)'
@@ -128,7 +145,6 @@ def get_virtual_role(v, target_day=None, noon=True):
     for player in v['player']:
         # 名前の取得をし、そのプレイヤーのログを取得する。
         talk_list = [talk for talk in v['target_log'] if talk['name'] == player['name']]
-        # print(player['name'], talk_list)
 
         # そのプレイヤーのログから、仮想役職を取得する。
         player['virtual_role'] = virtual_role_check(talk_list, player)
@@ -143,12 +159,14 @@ def main_log_set():
 
     # 身内村判定
     def get_local_villager(vill_name):
-        for ng_word in ['ダンガンロンパ', 'ダンロン', 'RP', 'なんJ', '身内']:  # 除外する村名リスト
+        for ng_word in ['ダンガンロンパ', 'ダンロン', 'RP', 'なんJ', '身内', 'クッキー', 'ク☆']:  # 除外する村名リスト
             if ng_word in vill_name:
                 return True
         return False
 
     # 設定変数
+    target = dict()
+    target['setting_role'] = True  # 発言に役職データを入れる
     target_vill_number = 17  # 取得する数
     target_day = 2  # 取得したい日時。指定しない場合はNone
     target_role_pattern = 'A'  # 配役
@@ -171,30 +189,35 @@ def main_log_set():
         if get_local_villager(v['meta']['villagers_name']):
             continue
 
-        # 取得したいログだけ、target_logに挿入する。
+        # 取得日時が定義されていた場合、取得したいログだけ、target_logに挿入する。
         if target_day:
-            # データを取りたい日時のみ取得する。もし存在しない日時の場合はこの後の処理をしない。
+            # もし指定した日時が存在しない場合はこの後の処理をしない。
             today_data = day_cutter(v['log'], target_day=target_day, noon=True)
             if today_data is None:
                 continue
             v['target_log'] = day_log_add_id(today_data)  # ログに日ごとのIDを割り振る
 
-        # 取得したいログ形式だけ、target_logに挿入する。
+        # 取得したいログ形式（発言、独り言）だけ、target_logに挿入する。
         if target_log_type:
             target_log = list()
             [target_log.append(talk) for talk in v['target_log'] if talk['type'] == target_log_type]
             v['target_log'] = target_log
 
-        # プレイヤーごとに発言IDを割り振る。（このメソッドはvのdataをそのまま書き換える）。
+        # プレイヤーごとに発言IDを割り振る。（このメソッドはvのtarget_logをそのまま書き換える）。
         add_player_talk_id(day_log=v['target_log'], player_list=v['player'])
 
         # もし全ログ取得をする場合、ここで日時データを挿入する。
 
+        # 発言ごとに役職情報を付け加えるかどうか
+        if target['setting_role']:
+            pass
+
         # その日の振る舞いから、仮想（振舞っている役職）役職を取得する。
         if target_virtual_role:
-            v['player'] = get_virtual_role(v, target_day=target_day, noon=True)
+            # プレイヤーリストに仮想役職の追加をする
+            v['player'] = get_virtual_role(v, target_day=target_day, noon=True)  
 
-        # 余計なログを消す
+        # 全日程のログを消す
         del v['log']
 
         # ログをMongoに挿入する
