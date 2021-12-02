@@ -103,6 +103,5 @@ ENV/
 .idea
 
 # 人狼ログ
-log
-json
-cache
+log/
+json/

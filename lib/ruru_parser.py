@@ -7,6 +7,7 @@ import re
 from datetime import datetime as dt
 import os
 import json
+import sys
 
 
 def ruru_old_log_checker(s):
@@ -34,7 +35,6 @@ def ruru_parser(local_address=None, url=None):
         header = str(s.find('div', class_='d11'))
 
         villagers_name_regex = r'「.*」'
-        villagers_number_regex = r'(参加:|定員：|定員:)..?名'
         role_pattern_regex = r'(\[配役.\]|役職\[.\])'  # 配役パターン
         time_data_regex = r'[0-9]{4}\/[0-9]{2}\/[0-9]{2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}'
         meta_data = dict()
@@ -43,19 +43,33 @@ def ruru_parser(local_address=None, url=None):
         meta_data['villagers_name'] = re.search(villagers_name_regex, header).group().lstrip('「').rstrip('」')
 
         # 参加人数の取得
+        # 定員と間違えがちだし、プレイヤー名のカウントを取ればいいので削除
+        """
+        villagers_number_regex = r'(参加:|定員：|定員:)..?名'
         villagers_number = re.search(villagers_number_regex, header).group()
         meta_data['villagers_number'] = re.search(r'[0-9][0-9]?', villagers_number).group()
+        """
 
         # 配役パターンの取得
-        role_pattern = re.search(role_pattern_regex, header).group()
-        meta_data['role_pattern'] = re.search(r'(A|B|C|D|Z)', role_pattern).group()
+        role_pattern = re.search(role_pattern_regex, header)
+        # 昔の村は配役パターンがない為スキップ
+        if role_pattern:
+            role_pattern = role_pattern.group()
+            meta_data['role_pattern'] = re.search(r'(A|B|C|D|Z)', role_pattern).group()
+        else:
+            meta_data['role_pattern'] = None
 
         # timestampの取得
         time_data = re.search(time_data_regex, str(s.find('div', class_='d12150')))  # るる鯖新ログ形式なら取得可
         if not time_data:
             time_data = re.search(time_data_regex, str(s.find_all('div', class_='d12150')[1]))
 
-        meta_data['timestamp'] = int(dt.strptime(time_data.group(), '%Y/%m/%d %H:%M:%S').timestamp())
+        # 昔の村は日付情報が入っていない為、その場合はスキップする
+        if time_data:
+            meta_data['timestamp'] = int(dt.strptime(time_data.group(), '%Y/%m/%d %H:%M:%S').timestamp())
+        else:
+            meta_data['timestamp'] = 0
+
         meta_data['server_name'] = 'ruru'
 
         meta_data['version'] = '0.11'
@@ -86,14 +100,17 @@ def ruru_parser(local_address=None, url=None):
         プレイヤーの情報をパースして返す
         s: soup
         """
-        player = s.find('table', class_='iconsmall').find_all('td')
+        # player = s.find('table', class_='iconsmall').find_all('td')
+        player = s.find('div', class_='d1221').find_all('td')
 
         player_list = list()
         trip_list = list()
         role_list = list()
 
         # ログのタイプを選択する
+        # るる鯖ログの仕様上、この順番でログ取得をする必要性がある
         log_type = ['icon', 'player', 'icon', 'player', 'role', 'role', 'reset']
+        role_type = ["村人", "人狼", "占い師", "霊能", "狂人", "狩人", "共有", "妖狐", "狂信者", "背徳者", "猫又", "決定前"]
         now_log = 0
 
         # プレイヤーとロールの対応表を作る
@@ -110,13 +127,30 @@ def ruru_parser(local_address=None, url=None):
                     trip_list.append(trip_data.group().lstrip('【').rstrip('】').replace('<wbr>', ''))
 
             elif log_type[now_log] == 'role':
+                # 役職にヒットするまでループする
+                kari_role_data = v.find_all('span')
+                if len(kari_role_data):
+                    hit_role = False
+                    for v in kari_role_data:
+                        kari_role_str = str(v.text).replace('\u3000', '')
+                        print(kari_role_str)
+                        if kari_role_str in role_type:
+                            role_list.append(kari_role_str)
+                            hit_role = True
+                            break
+                    
+                    # 役職検知ミスは重大なエラーなので検出する
+                    if not hit_role:
+                        raise ValueError("ヒットする役職名がありません")
+                """
+                # スマホによくヒットした為コメントアウト
                 role_data = v.find_all('span')
-                #
                 if role_data != [] and len(role_data) == 1:
                     role_list.append(str(role_data[0].text).replace('\u3000', ''))
                 # spanタグの時間タグを取得してしまう事がある為、もし取得していた場合はずらす
                 elif len(role_data) >= 2:
                     role_list.append(str(role_data[1].text).replace('\u3000', ''))
+                """
             now_log += 1
             if log_type[now_log] == 'reset':
                 now_log = 0
@@ -148,7 +182,8 @@ def ruru_parser(local_address=None, url=None):
         now_day = None  # 現在の日数を取得する
         night_checkr = r'd12151 log_night'  # 夜チェッカー
         i = 0
-        all_log_data = dict()  # 全ての発言ログを取得する変数
+        all_log_data = list()  # 全ての発言ログを取得する変数
+        # all_log_data = dict()  # 全ての発言ログを取得する変数
         for v in day_list:
             i += 1
             # print(v)
@@ -188,14 +223,25 @@ def ruru_parser(local_address=None, url=None):
                     for talk in talks:
                         name, text = talk.find('span', class_='name'), talk.find('td', class_='cc')
                         # '投票時間になりました。時間内に処刑の対象を決定してください'
+                        
+                        log_index = talk.find('span', class_='name'), talk.find('td', class_='cn')
+                        log_index = re.sub('<[^<]+?>', '', str(log_index))
+                        print(log_index)
+
 
                         # 発言ログで、空ログではない場合の処理
                         if text and name:
                             # 独り言か否かのチェック
+                            # !!! 霊界発言チェックも必要だこれ
                             if '<span class="end">の独り言</span>' in str(talk):
                                 log_type = 'soliloquence'
+                                log_index = None
+                            elif '<td class="ccd">' in str(talk):
+                                log_type = 'ghost'
+                                log_index = 1
                             else:
                                 log_type = 'talk'
+                                log_index = 1
 
                             name = str(name.get_text())  # re.sub(r'<?span.*>', '', str(name))
                             text = re.sub(r'<br/>', ' ', str(text))
@@ -210,8 +256,18 @@ def ruru_parser(local_address=None, url=None):
                         # 投票の場合の処理　未実装
 
                     move_datas.reverse()  # 取得ログを逆転させる
-                    day_x_noon = 'day_%d_noon' % now_date
-                    all_log_data[day_x_noon] = move_datas
+                    # 要素名がころころ変わると取得しにくいので"day", "state"で指定させることにした
+                    # day_x_noon = 'day_%d_noon' % now_date
+                    # all_log_data[day_x_noon] = move_datas
+
+                    log_data = {
+                        "day": now_date,
+                        "state": "noon",
+                        "log": move_datas
+                    }
+                    all_log_data.append(log_data)
+
+                    raise ValueError("テスト用")
 
         return all_log_data
 
@@ -229,27 +285,51 @@ def ruru_parser(local_address=None, url=None):
     ruru_dict = dict()
     ruru_dict['meta'] = meta_parser(soup)
     ruru_dict['player'] = player_parser(soup)
+    ruru_dict['meta']['villagers_number'] = len(ruru_dict['player'])
     ruru_dict['log'] = main_text_parser(soup)
 
     return ruru_dict
 
 
+def log_number_to_json(log_number):
+    write_file_name = '../json/%s.json' % log_number
+    if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0:
+        print('EXIST %d' % log_number)
+    else:
+        print('OPEN %d' % log_number)
+        f = open(write_file_name, 'w')
+        json_data = json.dumps(
+                ruru_parser(local_address='../log/%d.html' % log_number ),
+                sort_keys=True, ensure_ascii=False, indent=2
+            )
+        f.write(json_data)
+        f.close()
+
 if __name__ == '__main__':
-    files = os.listdir('../log/')
-    for file in files:
-        # ファイルをパースし、失敗したら見なかった事にする
-        try:
-            write_file_name = '../json/%s' % file.split('.')[0] + '.json'
-            if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0:
-                print('EXIST %s' % file)
-            else:
-                print('OPEN %s' % file)
-                f = open(write_file_name, 'w')
-                json_data = json.dumps(
-                        ruru_parser(local_address='../log/%s' % file),
-                        sort_keys=True, ensure_ascii=False, indent=2
-                    )
-                f.write(json_data)
-                f.close()
-        except:
-            print('ERROR %s' % file)
+    args = sys.argv
+
+    if len(args) <= 1:
+        files = os.listdir('../log/')
+        for file in files:
+            log_number_to_json(int(file.split('.')[0]))
+            """
+            # ファイルをパースし、失敗したら見なかった事にする
+            # jsonディレクトリが必要。処理はgetの方にあった。
+            # try:
+                write_file_name = '../json/%s' % file.split('.')[0] + '.json'
+                if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0:
+                    print('EXIST %s' % file)
+                else:
+                    print('OPEN %s' % file)
+                    f = open(write_file_name, 'w')
+                    json_data = json.dumps(
+                            ruru_parser(local_address='../log/%s' % file),
+                            sort_keys=True, ensure_ascii=False, indent=2
+                        )
+                    f.write(json_data)
+                    f.close()
+            # except:
+            #     print('ERROR %s' % file)
+            """
+    else:
+        log_number_to_json(int(args[1]))
