@@ -16,3 +16,12 @@ add_mongo_to_cacheとcache_to_pandasはJupyter
 0.1 なんか作った
 0.11 ログ解析結果を入れた（消した）
 0.2 ようやく全ログ取得が出来るようになった
+
+
+## 現在の問題
+
+https://ruru-jinro.net/log/log27257.html
+
+ここの村はいける
+
+20000村とかは終了後が認識出来ない
