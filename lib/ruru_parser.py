@@ -92,7 +92,7 @@ def talk_parser(talk):
         word_type = 'gm'
         player_name, talk_message = get_double_span(talk, 'gm')
         log_index = get_talk_index(talk)
-        print('GM', talk, player_name, talk_message)
+        # print('GM', talk, player_name, talk_message)
 
     # 観戦発言
     elif spectator_talk:
