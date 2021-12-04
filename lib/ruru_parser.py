@@ -14,6 +14,18 @@ import sys
 def remove_html_tags(text):
     return re.sub('<[^<]+?>', '', str(text))
 
+    
+def get_talk_index(text):
+    text = str(text).replace(' ', '')
+    i = re.findall('>[0-9]+<', text)
+    if len(i) == 0:
+        return None
+    i = i[0]
+    i = i.replace('>', '').replace('<', '')
+    if len(i) == 0:
+        return None
+    return int(i)
+
 def get_double_span(v, class_name):
     result = v.find_all('span', class_=class_name)
     one = remove_html_tags(result[0])
@@ -37,6 +49,72 @@ def ruru_old_log_checker(s):
     time_data = re.search(time_data_regex, str(s.find('div', class_='d12150')))
     return False if time_data else True
 
+
+# 会話文章を取得する
+# 昼と夜で共通部分が多かったのでまとめた
+def talk_parser(talk):
+    word_type = None
+    player_name = None
+    talk_message = None
+    log_index = None
+    player_talk = talk.find('td', class_='cn')  # プレイヤー発言
+    gm_talk = talk.find('td', class_='cng')  # GM発言
+    spectator_talk = talk.find('td', class_='cnw')  # 観戦者
+    rip_talk = talk.find('td', class_='cnd')  # 霊界発言
+
+    # プレイヤー発言
+    if player_talk:
+        talk_message = remove_html_tags(talk.find('td', class_='cc'))
+
+        # 空要素の場合はスキップする
+        if len(talk_message) == 0:
+            return None
+
+        # 狼の独り言検知
+        word_type = 'talk'
+        if '<span class="end">の独り言</span>' in str(player_talk):
+            word_type = 'whisper'
+        elif '⑮' in str(talk):
+            word_type = 'before15'
+        player_name = remove_html_tags(player_talk.find('span')).replace('の独り言', '')
+        # print(player_talk)
+
+        # 発言index取得
+        try:
+            log_index = get_talk_index(talk)
+        except:
+            print(talk)
+            raise ValueError('index値の設定が間違ってます')
+
+    # GM発言
+    elif gm_talk:
+        # 終了後はspan, class_='gm'じゃないと上手く取得できない
+        word_type = 'gm'
+        player_name, talk_message = get_double_span(talk, 'gm')
+        log_index = get_talk_index(talk)
+        print('GM', talk, player_name, talk_message)
+
+    # 観戦発言
+    elif spectator_talk:
+        word_type = "spectator"
+        player_name, talk_message = get_double_td(talk)
+
+    # 霊界発言
+    elif rip_talk:
+        word_type = 'rip'
+        player_name, talk_message = get_double_td(talk)
+    
+    else: 
+        return None
+
+    # 実行値の格納
+    move_data = {
+        'name': player_name,
+        'text': talk_message,
+        'type': word_type,
+        'index': log_index,
+    }
+    return move_data
 
 def ruru_parser(local_address=None, url=None):
     """
@@ -213,12 +291,36 @@ def ruru_parser(local_address=None, url=None):
             # tr:nth-child(21) > .cv
             if end_day:
                 end_day = False
-                # 未実装
+                move_datas = list()
+                for talk in talks:
+                    move_data = talk_parser(talk)
+
+                    if move_data is not None:
+                        move_datas.append(move_data)
+
+                log_data = {
+                    "day": None,
+                    "state": "noon",
+                    "log": move_datas,
+                }
+                all_log_data.append(log_data)
 
             # 開始前ログの解析をする
             elif i == len(day_list):
                 # 未実装
-                pass
+                move_datas = list()
+                for talk in talks:
+                    move_data = talk_parser(talk)
+
+                    if move_data is not None:
+                        move_datas.append(move_data)
+
+                log_data = {
+                    "day": 1,
+                    "state": "noon",
+                    "log": move_datas,
+                }
+                all_log_data.append(log_data)
 
             # ゲーム中のログ解析をする
             else:
@@ -226,69 +328,16 @@ def ruru_parser(local_address=None, url=None):
                 now_date = (len(day_list) - 2 - i) // 2 + 2
                 # 夜中
                 if '<div class="d12151 log_night">' in str(v):
-                    """
-                    tdクラスごとの発言傾向
-                    cn プレイヤー
-                    cnw 観戦者
-                    cng GM発言
-                    ca 役職
-                    <tr><td class="ca" colspan="2"><span class="fortune">「<span class="name">せと</span>」さんは「<span class="name">オリオリオ</span>」さんを占いました　結果：<span class="oc00">【村　人】</span></span></td></tr>
-                    <tr><td class="ca" colspan="2"><span class="wolf">「<span class="name">モハメドりあ</span>」さんは「<span class="name">第一犠牲者</span>」さんを噛みました</span></td></tr> 
-                    <tr><td class="ca" colspan="2"><span class="hunter">「<span class="name">オリオリオ</span>」さんは「<span class="name">せと</span>」さんを護衛しました</span></td></tr>      
-                    """
-                    """
-                    spanクラスごとの役職（別になくてもいいや。狼の場合は独り言は入れるべきだけど）
-                    <span class="turquoise oc02 name">せと</span>
-                    占い
-                    <span class="fox">ぶwwww</span>
-                    狐
-                    <span class="wolf">
-                    <span class="joint"> 共有
-
-                    """
                     move_datas = list()
                     action_datas = list()
-                    death_target = None
+                    death_target = []
 
                     for talk in talks:
-                        word_type = None
-                        player_name = None
-                        talk_message = None
-                        player_talk = talk.find('td', class_='cn')  # プレイヤー発言
-                        gm_talk = talk.find('td', class_='cng')  # GM発言
                         acction_talk = talk.find('td', class_='ca')  # 役職実行
-                        spectator_talk = talk.find('td', class_='cnw')  # 観戦者
-                        rip_talk = talk.find('td', class_='cnd')  # 霊界発言
                         game_message = talk.find('td', class_='cs')  # ゲームシステムメッセージ
 
-                        # プレイヤー発言
-                        if player_talk:
-                            talk_message = remove_html_tags(talk.find('td', class_='cc'))
-
-                            # 空要素の場合はスキップする
-                            if len(talk_message) == 0:
-                                continue
-
-                            # 狼の独り言検知
-                            word_type = 'night'
-                            if '<span class="end">の独り言</span>' in str(player_talk):
-                                word_type = 'whisper'
-                            player_name = remove_html_tags(player_talk).replace('の独り言', '')
-                    
-                        # GM発言
-                        elif gm_talk:
-                            word_type = 'gm'
-                            player_name, talk_message = get_double_td(talk)
-                            """
-                            # 動作が怪しかったらこっちに戻してもいい
-                            player_name = talk.find_all('span', class_='gm')[0]
-                            player_name = remove_html_tags(player_name)
-                            talk_message = talk.find_all('span', class_='gm')[1]
-                            talk_message = remove_html_tags(talk_message)
-                            """
-                        
                         # 役職実行
-                        elif acction_talk:
+                        if acction_talk:
                             talk_str = str(talk)
                             action_role = None
                             # !!! 役職名（英語）は後で考える
@@ -311,38 +360,18 @@ def ruru_parser(local_address=None, url=None):
                             # 役職実行は発言じゃないのでcontinueする
                             continue
 
-                        elif spectator_talk:
-                            word_type = "spectator"
-                            player_name, talk_message = get_double_td(talk)
-
-                        elif rip_talk:
-                            word_type = 'rip'
-                            player_name, talk_message = get_double_td(talk)
-
                         # ゲームメッセージなど
                         elif game_message:
                             # print(talk)
                             # 処刑
                             if '<span class="death">' in str(talk):
-                                death_target = remove_html_tags(str(talk.find('span', class_='name')))
+                                death_target.append(remove_html_tags(talk.find('span', class_='name')))
                             continue
 
-                        # その他
-                        else:
-                            print(talk)
-                            raise ValueError('ちょっと怪しい')
+                        move_data = talk_parser(talk)
 
-                        if player_name is None:
-                            print(talk)
-                            raise ValueError('おかしな夜会話')
-
-                        # 実行値の格納
-                        move_data = {
-                            'name': player_name,
-                            'text': talk_message,
-                            'type': word_type,
-                        }
-                        move_datas.append(move_data)
+                        if move_data is not None:
+                            move_datas.append(move_data)
 
                     log_data = {
                         "day": now_date,
@@ -358,53 +387,34 @@ def ruru_parser(local_address=None, url=None):
                     move_datas = list()
                     vote_datas = list()
                     vote_count = 0
+                    death_target = []
                     for talk in talks:
                         vote = talk.find('td', class_='cv')
+                        game_message = talk.find('td', class_='cs')  # ゲームシステムメッセージ
+
                         # 投票
                         if vote:
                             vote_count += 1
                             vote_data = list()
                             for v in vote.find_all('tr'):
                                 b = v.find_all('span')
-                                vote_data.append({'from': remove_html_tags(str(b[0])), 'to': remove_html_tags(str(b[1]))})
+                                vote_data.append({'from': remove_html_tags(b[0]), 'to': remove_html_tags(b[1])})
                             vote_datas.append({'count': vote_count, 'data': vote_data})
                             continue
-
-                        name, text = talk.find('span', class_='name'), talk.find('td', class_='cc')
-                        # '投票時間になりました。時間内に処刑の対象を決定してください'
-                        # 発言ログで、空ログではない場合の処理
-                        if text and name:
-                            # 独り言か否かのチェック
-                            # !!! 霊界発言チェックも必要だこれ
-                            log_index = None
-                            if '<span class="end">の独り言</span>' in str(talk):
-                                log_type = 'soliloquence'
-                            elif '<td class="ccd">' in str(talk):
-                                log_type = 'ghost'
-                            elif '⑮' in str(talk):
-                                log_type = 'before15'
-                            else:
-                                log_type = 'talk'
-                                
-                                log_index_base = talk.find('span', class_='name'), talk.find('td', class_='cn')
-                                if log_index_base[1] is not None:
-                                    index_result = str(log_index_base[1]).replace(str(log_index_base[1].span), '')
-                                    log_index = remove_html_tags(index_result)  # .strip()
-
-
-                            name = str(name.get_text())  # re.sub(r'<?span.*>', '', str(name))
-                            text = re.sub(r'<br/>', ' ', str(text))
-                            text = re.sub('<[^<]+?>', '', text)
-                            move_data = {
-                                'name': name,
-                                'text': text,
-                                'type': log_type,
-                                'index': log_index,
-                            }
-                            move_datas.append(move_data)
+                        # ゲームメッセージなど
+                        elif game_message:
+                            if '<span class="death">' in str(talk):
+                                death_target.append(remove_html_tags(talk.find('span', class_='name')))
                             continue
 
-                        print(talk)
+                        move_data = talk_parser(talk)
+
+                        if move_data is not None:
+                            move_datas.append(move_data)
+
+                        else:
+                            pass
+                            # print('未検知', talk)
 
 
 
@@ -414,6 +424,7 @@ def ruru_parser(local_address=None, url=None):
                         "state": "noon",
                         "log": move_datas,
                         'vote': vote_datas,
+                        'attack_death': death_target,
                     }
                     all_log_data.append(log_data)
 
@@ -466,24 +477,5 @@ if __name__ == '__main__':
         files = os.listdir('../log/')
         for file in files:
             log_number_to_json(int(file.split('.')[0]))
-            """
-            # ファイルをパースし、失敗したら見なかった事にする
-            # jsonディレクトリが必要。処理はgetの方にあった。
-            # try:
-                write_file_name = '../json/%s' % file.split('.')[0] + '.json'
-                if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0:
-                    print('EXIST %s' % file)
-                else:
-                    print('OPEN %s' % file)
-                    f = open(write_file_name, 'w')
-                    json_data = json.dumps(
-                            ruru_parser(local_address='../log/%s' % file),
-                            sort_keys=True, ensure_ascii=False, indent=2
-                        )
-                    f.write(json_data)
-                    f.close()
-            # except:
-            #     print('ERROR %s' % file)
-            """
     else:
         log_number_to_json(int(args[1]), test_mode=True)
