@@ -463,6 +463,7 @@ def log_number_to_json(log_number, test_mode=False):
 
     if log_number < 20000:
         print('SKIP', log_number)
+        return
     if os.path.exists(write_file_name) and os.path.getsize(write_file_name) != 0 and not test_mode:
         print('EXIST %d' % log_number)
     else:
