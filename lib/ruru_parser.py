@@ -347,6 +347,9 @@ def ruru_parser(local_address=None, url=None):
                                 action_role = '人狼'
                             elif '<span class="hunter">' in talk_str:
                                 action_role = '狩人'
+                            # 強化妖狐が居たので追記
+                            elif '<span class="fox">' in talk_str:
+                                action_role = '妖狐'
                             else:
                                 print(talk)
                                 raise ValueError('不明役職')
