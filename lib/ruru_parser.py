@@ -468,13 +468,16 @@ def log_number_to_json(log_number, test_mode=False):
         print('EXIST %d' % log_number)
     else:
         print('OPEN %d' % log_number)
-        f = open(write_file_name, 'w', encoding='utf-8')
-        json_data = json.dumps(
-                ruru_parser(local_address='../log/%d.html' % log_number ),
-                sort_keys=True, ensure_ascii=False, indent=2
-            )
-        f.write(json_data)
-        f.close()
+        try:
+            f = open(write_file_name, 'w', encoding='utf-8')
+            json_data = json.dumps(
+                    ruru_parser(local_address='../log/%d.html' % log_number ),
+                    sort_keys=True, ensure_ascii=False, indent=2
+                )
+            f.write(json_data)
+            f.close()
+        except:
+            print('ERROR')
 
 if __name__ == '__main__':
     args = sys.argv
